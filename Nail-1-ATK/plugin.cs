@@ -13,29 +13,25 @@ using BepInEx.Configuration;
 
 namespace nord.Nail1ATK
 {
-    public class PluginConfig : ConfigManager
+    public class PluginConfig
     {
-        public PluginConfig(ConfigFile Config) : base(Config)
+        public static ConfigEntry<int> NailAttackSetter { get; private set; }
+        public static ConfigEntry<double> NailAttackMultiplier { get; private set; }
+
+        public PluginConfig(ConfigFile config)
         {
-        }
+            var modVersion = config.Bind("Base", "ModVersion", Plugin.ModVersion, "Don't change.");
+            
+            bool needsSave = modVersion.Value != Plugin.ModVersion;
+            modVersion.Value = Plugin.ModVersion;
 
-        protected override void CheckConfigImplements(Step step)
-        {
-            bool saveFlag = false;
+            NailAttackSetter = config.Bind("Settings", "NailAttackSetter", 1, "Nail attack power. If 0, it is not affected.");
+            NailAttackMultiplier = config.Bind("Settings", "NailAttackMultiplier", 1.0, "Multiplier for nail attack power. If 0, it is not affected.");
 
-            if (step == Step.AWAKE)
+            if (needsSave)
             {
-                var modVersion = Bind("Base", "ModVersion", Plugin.ModVersion, "Don't change.");
-                modVersion.Value = Plugin.ModVersion;
-
-                var nailAttackSetter = Bind("Settings", "NailAttackSetter", 1, "Nail attack power. If 0, it is not affected.");
-                var nailAttackMultiplier = Bind("Settings", "NailAttackMultiplier", 1, "Multiplier for nail attack power. If 0, it is not affected.");
-
-                saveFlag = true;
-            }
-            if (saveFlag)
-            {
-                Save(false);
+                config.Save();
+                LogManager.LogInfo("Config file updated and saved.");
             }
         }
     }
@@ -47,24 +43,19 @@ namespace nord.Nail1ATK
         public const string ModName = "Nail1ATK";
         public const string ModVersion = "1.0.0";
 
-        public static int nailAttackSetter = 1;
-        public static int nailAttackMultiplier = 1;
+        public static PluginConfig settings;
         private Harmony harmony;
 
         public void Awake()
         {
             LogManager.Logger = base.Logger;
 
-            new PluginConfig(base.Config);
-            ConfigManager.CheckConfig(ConfigManager.Step.AWAKE);
-
-            nailAttackSetter = ConfigManager.GetValue<int>("Settings", "NailAttackSetter");
-            nailAttackMultiplier = ConfigManager.GetValue<int>("Settings", "NailAttackMultiplier");
+            settings = new PluginConfig(base.Config);
 
             LogManager.LogInfo("Patching...");
             harmony = new Harmony($"{ModGuid}.Patch");
             harmony.PatchAll(typeof(PluginPatches));
-            LogManager.LogInfo($"Nail1ATK Patched. Settings: NailAttackSetter={nailAttackSetter}, NailAttackMultiplier={nailAttackMultiplier}");
+            LogManager.LogInfo($"Nail1ATK Patched. Settings: NailAttackSetter={PluginConfig.NailAttackSetter.Value}, NailAttackMultiplier={PluginConfig.NailAttackMultiplier.Value}");
         }
 
         public void OnDestroy()
@@ -78,13 +69,16 @@ namespace nord.Nail1ATK
         [HarmonyPatch(typeof(PlayerData), "nailDamage", MethodType.Getter)]
         public static void Postfix(ref int __result)
         {
-            if (Plugin.nailAttackSetter != 0)
+            int setterValue = PluginConfig.NailAttackSetter.Value;
+            double multiplierValue = PluginConfig.NailAttackMultiplier.Value;
+
+            if (setterValue != 0)
             {
-                __result = Plugin.nailAttackSetter;
+                __result = setterValue;
             }
-            if (Plugin.nailAttackMultiplier != 0)
+            if (multiplierValue != 0)
             {
-                __result *= Plugin.nailAttackMultiplier;
+                __result = (int)Math.Round(__result * multiplierValue);
             }
         }
     }
